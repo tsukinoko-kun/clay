@@ -417,7 +417,6 @@ type PointerData struct {
 	State    PointerDataInteractionState
 }
 type ElementDeclaration struct {
-	Id              ElementId
 	Layout          LayoutConfig
 	BackgroundColor Color
 	CornerRadius    CornerRadius
@@ -443,6 +442,7 @@ const (
 	ERROR_TYPE_FLOATING_CONTAINER_PARENT_NOT_FOUND
 	ERROR_TYPE_PERCENTAGE_OVER_1
 	ERROR_TYPE_INTERNAL_ERROR
+	ERROR_TYPE_UNBALANCED_OPEN_CLOSE
 )
 
 type ErrorData struct {
@@ -2062,7 +2062,6 @@ type LayoutElementHashMapItem struct {
 	HoverFunctionUserData any
 	NextIndex             int32
 	Generation            uint32
-	IdAlias               uint32
 	DebugData             *__DebugElementData
 }
 type __LayoutElementHashMapItemArray struct {
@@ -2573,7 +2572,20 @@ func __HashNumber(offset uint32, seed uint32) ElementId {
 	return ElementId{Id: hash + 1, Offset: offset, BaseId: seed, StringId: __STRING_DEFAULT}
 }
 
-func __HashString(key String, offset uint32, seed uint32) ElementId {
+func __HashString(key String, seed uint32) ElementId {
+	var hash uint32 = seed
+	for i := int32(0); i < key.Length; i++ {
+		hash += uint32(*(*byte)(unsafe.Add(unsafe.Pointer(key.Chars), i)))
+		hash += hash << 10
+		hash ^= hash >> 6
+	}
+	hash += hash << 3
+	hash ^= hash >> 11
+	hash += hash << 15
+	return ElementId{Id: hash + 1, Offset: 0, BaseId: hash + 1, StringId: key}
+}
+
+func __HashStringWithOffset(key String, offset uint32, seed uint32) ElementId {
 	var (
 		hash uint32 = 0
 		base uint32 = seed
@@ -2801,12 +2813,12 @@ func __PointIsInsideRect(point Vector2, rect BoundingBox) bool {
 	return point.X >= rect.X && point.X <= rect.X+rect.Width && point.Y >= rect.Y && point.Y <= rect.Y+rect.Height
 }
 
-func __AddHashMapItem(elementId ElementId, layoutElement *LayoutElement, idAlias uint32) *LayoutElementHashMapItem {
+func __AddHashMapItem(elementId ElementId, layoutElement *LayoutElement) *LayoutElementHashMapItem {
 	var context *Context = GetCurrentContext()
 	if context.layoutElementsHashMapInternal.Length == context.layoutElementsHashMapInternal.Capacity-1 {
 		return nil
 	}
-	var item LayoutElementHashMapItem = LayoutElementHashMapItem{ElementId: elementId, LayoutElement: layoutElement, NextIndex: -1, Generation: context.generation + 1, IdAlias: idAlias}
+	var item LayoutElementHashMapItem = LayoutElementHashMapItem{ElementId: elementId, LayoutElement: layoutElement, NextIndex: -1, Generation: context.generation + 1}
 	var hashBucket uint32 = elementId.Id % uint32(context.layoutElementsHashMap.Capacity)
 	var hashItemPrevious int32 = -1
 	var hashItemIndex int32 = *(*int32)(unsafe.Add(unsafe.Pointer(context.layoutElementsHashMap.InternalArray), unsafe.Sizeof(int32(0))*uintptr(hashBucket)))
@@ -2816,7 +2828,6 @@ func __AddHashMapItem(elementId ElementId, layoutElement *LayoutElement, idAlias
 			item.NextIndex = hashItem.NextIndex
 			if hashItem.Generation <= context.generation {
 				hashItem.ElementId = elementId
-				hashItem.IdAlias = idAlias
 				hashItem.Generation = context.generation + 1
 				hashItem.LayoutElement = layoutElement
 				hashItem.DebugData.Collision = false
@@ -2866,7 +2877,7 @@ func __GenerateIdForAnonymousElement(openLayoutElement *LayoutElement) ElementId
 		elementId     ElementId      = __HashNumber(uint32(parentElement.ChildrenOrTextContent.Children.Length), parentElement.Id)
 	)
 	openLayoutElement.Id = elementId.Id
-	__AddHashMapItem(elementId, openLayoutElement, 0)
+	__AddHashMapItem(elementId, openLayoutElement)
 	__StringArray_Add(&context.layoutElementIdStrings, elementId.StringId)
 	return elementId
 }
@@ -2905,6 +2916,10 @@ func __CloseElement() {
 	}
 	var openLayoutElement *LayoutElement = __GetOpenLayoutElement()
 	var layoutConfig *LayoutConfig = openLayoutElement.LayoutConfig
+	if layoutConfig == nil {
+		openLayoutElement.LayoutConfig = &LayoutConfig_DEFAULT
+		layoutConfig = &LayoutConfig_DEFAULT
+	}
 	var elementHasClipHorizontal bool = false
 	var elementHasClipVertical bool = false
 	for i := int32(0); i < openLayoutElement.ElementConfigs.Length; i++ {
@@ -3091,8 +3106,28 @@ func __OpenElement() {
 		return
 	}
 	var layoutElement LayoutElement = LayoutElement{}
-	LayoutElementArray_Add(&context.layoutElements, layoutElement)
+	var openLayoutElement *LayoutElement = LayoutElementArray_Add(&context.layoutElements, layoutElement)
 	__int32_tArray_Add(&context.openLayoutElementStack, context.layoutElements.Length-1)
+	__GenerateIdForAnonymousElement(openLayoutElement)
+	if context.openClipElementStack.Length > 0 {
+		__int32_tArray_Set(&context.layoutElementClipElementIds, context.layoutElements.Length-1, __int32_tArray_GetValue(&context.openClipElementStack, context.openClipElementStack.Length-1))
+	} else {
+		__int32_tArray_Set(&context.layoutElementClipElementIds, context.layoutElements.Length-1, 0)
+	}
+}
+
+func __OpenElementWithId(elementId ElementId) {
+	var context *Context = GetCurrentContext()
+	if context.layoutElements.Length == context.layoutElements.Capacity-1 || context.booleanWarnings.MaxElementsExceeded {
+		context.booleanWarnings.MaxElementsExceeded = true
+		return
+	}
+	var layoutElement LayoutElement = LayoutElement{}
+	layoutElement.Id = elementId.Id
+	var openLayoutElement *LayoutElement = LayoutElementArray_Add(&context.layoutElements, layoutElement)
+	__int32_tArray_Add(&context.openLayoutElementStack, context.layoutElements.Length-1)
+	__AddHashMapItem(elementId, openLayoutElement)
+	__StringArray_Add(&context.layoutElementIdStrings, elementId.StringId)
 	if context.openClipElementStack.Length > 0 {
 		__int32_tArray_Set(&context.layoutElementClipElementIds, context.layoutElements.Length-1, __int32_tArray_GetValue(&context.openClipElementStack, context.openClipElementStack.Length-1))
 	} else {
@@ -3118,7 +3153,7 @@ func __OpenTextElement(text String, textConfig *TextElementConfig) {
 	var textMeasured *__MeasureTextCacheItem = __MeasureTextCached(&text, textConfig)
 	var elementId ElementId = __HashNumber(uint32(parentElement.ChildrenOrTextContent.Children.Length), parentElement.Id)
 	textElement.Id = elementId.Id
-	__AddHashMapItem(elementId, textElement, 0)
+	__AddHashMapItem(elementId, textElement)
 	__StringArray_Add(&context.layoutElementIdStrings, elementId.StringId)
 	var textDimensions Dimensions = Dimensions{Width: textMeasured.UnwrappedDimensions.Width, Height: func() float32 {
 		if int32(textConfig.LineHeight) > 0 {
@@ -3134,19 +3169,6 @@ func __OpenTextElement(text String, textConfig *TextElementConfig) {
 	parentElement.ChildrenOrTextContent.Children.Length++
 }
 
-func __AttachId(elementId ElementId) ElementId {
-	var context *Context = GetCurrentContext()
-	if context.booleanWarnings.MaxElementsExceeded {
-		return ElementId_DEFAULT
-	}
-	var openLayoutElement *LayoutElement = __GetOpenLayoutElement()
-	var idAlias uint32 = openLayoutElement.Id
-	openLayoutElement.Id = elementId.Id
-	__AddHashMapItem(elementId, openLayoutElement, idAlias)
-	__StringArray_Set(&context.layoutElementIdStrings, context.layoutElements.Length-1, elementId.StringId)
-	return elementId
-}
-
 func __ConfigureOpenElementPtr(declaration *ElementDeclaration) {
 	var (
 		context           *Context       = GetCurrentContext()
@@ -3156,7 +3178,6 @@ func __ConfigureOpenElementPtr(declaration *ElementDeclaration) {
 	if declaration.Layout.Sizing.Width.Type == __SIZING_TYPE_PERCENT && declaration.Layout.Sizing.Width.Size.Percent > 1 || declaration.Layout.Sizing.Height.Type == __SIZING_TYPE_PERCENT && declaration.Layout.Sizing.Height.Size.Percent > 1 {
 		context.errorHandler.ErrorHandlerFunction(ErrorData{ErrorType: ERROR_TYPE_PERCENTAGE_OVER_1, ErrorText: String{IsStaticallyAllocated: true, Length: int32(((len("An element was configured with SIZING_PERCENT, but the provided percentage value was over 1.0. Clay expects a value between 0 and 1, i.e. 20% is 0.2.") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("An element was configured with SIZING_PERCENT, but the provided percentage value was over 1.0. Clay expects a value between 0 and 1, i.e. 20% is 0.2.")}, UserData: context.errorHandler.UserData})
 	}
-	var openLayoutElementId ElementId = declaration.Id
 	openLayoutElement.ElementConfigs.InternalArray = (*ElementConfig)(unsafe.Add(unsafe.Pointer(context.elementConfigs.InternalArray), unsafe.Sizeof(ElementConfig{})*uintptr(context.elementConfigs.Length)))
 	var sharedConfig *SharedElementConfig = nil
 	if declaration.BackgroundColor.A > 0 {
@@ -3206,10 +3227,7 @@ func __ConfigureOpenElementPtr(declaration *ElementDeclaration) {
 					clipElementId = uint32(__int32_tArray_GetValue(&context.layoutElementClipElementIds, int32(int64((uintptr(unsafe.Pointer(parentItem.LayoutElement))-uintptr(unsafe.Pointer(context.layoutElements.InternalArray)))/unsafe.Sizeof(LayoutElement{})))))
 				}
 			} else if declaration.Floating.AttachTo == ATTACH_TO_ROOT {
-				floatingConfig.ParentId = __HashString(String{IsStaticallyAllocated: true, Length: int32(((len("__RootContainer") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("__RootContainer")}, 0, 0).Id
-			}
-			if openLayoutElementId.Id == 0 {
-				openLayoutElementId = __HashString(String{IsStaticallyAllocated: true, Length: int32(((len("__FloatingContainer") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("__FloatingContainer")}, uint32(context.layoutElementTreeRoots.Length), 0)
+				floatingConfig.ParentId = __HashString(String{IsStaticallyAllocated: true, Length: int32(((len("__RootContainer") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("__RootContainer")}, 0).Id
 			}
 			if declaration.Floating.ClipTo == CLIP_TO_NONE {
 				clipElementId = 0
@@ -3223,11 +3241,6 @@ func __ConfigureOpenElementPtr(declaration *ElementDeclaration) {
 	}
 	if declaration.Custom.CustomData != nil {
 		__AttachElementConfig(ElementConfigUnion{CustomElementConfig: __StoreCustomElementConfig(declaration.Custom)}, __ELEMENT_CONFIG_TYPE_CUSTOM)
-	}
-	if openLayoutElementId.Id != 0 {
-		__AttachId(openLayoutElementId)
-	} else if openLayoutElement.Id == 0 {
-		openLayoutElementId = __GenerateIdForAnonymousElement(openLayoutElement)
 	}
 	if declaration.Clip.Horizontal || declaration.Clip.Vertical {
 		__AttachElementConfig(ElementConfigUnion{ClipElementConfig: __StoreClipElementConfig(declaration.Clip)}, __ELEMENT_CONFIG_TYPE_CLIP)
@@ -3299,7 +3312,7 @@ func __InitializePersistentMemory(context *Context) {
 		maxMeasureTextCacheWordCount int32  = context.maxMeasureTextCacheWordCount
 		arena                        *Arena = &context.internalArena
 	)
-	context.scrollContainerDatas = __ScrollContainerDataInternalArray_Allocate_Arena(10, arena)
+	context.scrollContainerDatas = __ScrollContainerDataInternalArray_Allocate_Arena(100, arena)
 	context.layoutElementsHashMapInternal = __LayoutElementHashMapItemArray_Allocate_Arena(maxElementCount, arena)
 	context.layoutElementsHashMap = __int32_tArray_Allocate_Arena(maxElementCount, arena)
 	context.measureTextHashMapInternal = __MeasureTextCacheItemArray_Allocate_Arena(maxElementCount, arena)
@@ -4106,12 +4119,6 @@ func __CalculateFinalLayout() {
 				var hashMapItem *LayoutElementHashMapItem = __GetHashMapItem(currentElement.Id)
 				if hashMapItem != nil {
 					hashMapItem.BoundingBox = currentElementBoundingBox
-					if hashMapItem.IdAlias != 0 {
-						var hashMapItemAlias *LayoutElementHashMapItem = __GetHashMapItem(hashMapItem.IdAlias)
-						if hashMapItemAlias != nil {
-							hashMapItemAlias.BoundingBox = currentElementBoundingBox
-						}
-					}
 				}
 				var sortedConfigIndexes [20]int32
 				for elementConfigIndex := int32(0); elementConfigIndex < currentElement.ElementConfigs.Length; elementConfigIndex++ {
@@ -4527,9 +4534,6 @@ func SetPointerState(position Vector2, isPointerDown bool) {
 					}
 					ElementIdArray_Add(&context.pointerOverIds, mapItem.ElementId)
 					found = true
-					if mapItem.IdAlias != 0 {
-						ElementIdArray_Add(&context.pointerOverIds, ElementId{Id: mapItem.IdAlias})
-					}
 				}
 				if __ElementHasConfig(currentElement, __ELEMENT_CONFIG_TYPE_TEXT) {
 					dfsBuffer.Length--
@@ -4861,8 +4865,8 @@ func BeginLayout() {
 		rootDimensions.Width -= float32(__debugViewWidth)
 	}
 	context.booleanWarnings = BooleanWarnings{MaxElementsExceeded: false}
-	__OpenElement()
-	__ConfigureOpenElement(ElementDeclaration{Id: __HashString(String{IsStaticallyAllocated: true, Length: int32(((len("__RootContainer") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("__RootContainer")}, 0, 0), Layout: LayoutConfig{Sizing: Sizing{Width: SizingAxis{Size: struct {
+	__OpenElementWithId(__HashString(String{IsStaticallyAllocated: true, Length: int32(((len("__RootContainer") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("__RootContainer")}, 0))
+	__ConfigureOpenElement(ElementDeclaration{Layout: LayoutConfig{Sizing: Sizing{Width: SizingAxis{Size: struct {
 		// union
 		MinMax  SizingMinMax
 		Percent float32
@@ -4887,18 +4891,20 @@ func EndLayout() RenderCommandArray {
 			message = String{IsStaticallyAllocated: true, Length: int32(((len("Clay Error: Layout elements exceeded __maxElementCount") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("Clay Error: Layout elements exceeded __maxElementCount")}
 		}
 		__AddRenderCommand(RenderCommand{BoundingBox: BoundingBox{X: context.layoutDimensions.Width/2 - 59*4, Y: context.layoutDimensions.Height / 2, Width: 0, Height: 0}, RenderData: RenderData{Text: TextRenderData{StringContents: StringSlice{Length: message.Length, Chars: message.Chars, BaseChars: message.Chars}, TextColor: Color{R: 255, G: 0, B: 0, A: 255}, FontSize: 16}}, CommandType: RENDER_COMMAND_TYPE_TEXT})
-	} else {
-		__CalculateFinalLayout()
 	}
+	if context.openLayoutElementStack.Length > 1 {
+		context.errorHandler.ErrorHandlerFunction(ErrorData{ErrorType: ERROR_TYPE_UNBALANCED_OPEN_CLOSE, ErrorText: String{IsStaticallyAllocated: true, Length: int32(((len("There were still open layout elements when EndLayout was called. This results from an unequal number of calls to __OpenElement and __CloseElement.") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("There were still open layout elements when EndLayout was called. This results from an unequal number of calls to __OpenElement and __CloseElement.")}, UserData: context.errorHandler.UserData})
+	}
+	__CalculateFinalLayout()
 	return context.renderCommands
 }
 
 func getElementId(idString String) ElementId {
-	return __HashString(idString, 0, 0)
+	return __HashString(idString, 0)
 }
 
 func getElementIdWithIndex(idString String, index uint32) ElementId {
-	return __HashString(idString, index, 0)
+	return __HashStringWithOffset(idString, index, 0)
 }
 
 func Hovered() bool {

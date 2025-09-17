@@ -146,8 +146,7 @@ func CreateLayout(data *Data) clay.RenderCommandArray {
 
 	contentBackgroundColor := clay.Color{R: 90, G: 90, B: 90, A: 255}
 
-	clay.UI()(clay.ElementDeclaration{
-		Id:              clay.ID("OuterContainer"),
+	clay.UI(clay.ID("OuterContainer"))(clay.ElementDeclaration{
 		BackgroundColor: clay.Color{R: 43, G: 41, B: 51, A: 255},
 		Layout: clay.LayoutConfig{
 			LayoutDirection: clay.TOP_TO_BOTTOM,
@@ -156,8 +155,7 @@ func CreateLayout(data *Data) clay.RenderCommandArray {
 			ChildGap:        16,
 		},
 	}, func() {
-		clay.UI()(clay.ElementDeclaration{
-			Id: clay.ID("HeaderBar"),
+		clay.UI(clay.ID("HeaderBar"))(clay.ElementDeclaration{
 			Layout: clay.LayoutConfig{
 				Sizing: clay.Sizing{
 					Height: clay.SizingFixed(60),
@@ -172,8 +170,7 @@ func CreateLayout(data *Data) clay.RenderCommandArray {
 			BackgroundColor: contentBackgroundColor,
 			CornerRadius:    clay.CornerRadiusAll(5),
 		}, func() {
-			clay.UI()(clay.ElementDeclaration{
-				Id:              clay.ID("FileButton"),
+			clay.UI(clay.ID("FileButton"))(clay.ElementDeclaration{
 				Layout:          clay.LayoutConfig{Padding: clay.Padding{Left: 16, Right: 16, Top: 8, Bottom: 8}},
 				BackgroundColor: clay.Color{R: 150, G: 150, B: 150, A: 255},
 				CornerRadius:    clay.CornerRadiusAll(5),
@@ -188,8 +185,7 @@ func CreateLayout(data *Data) clay.RenderCommandArray {
 					clay.PointerOver(clay.GetElementId("FileMenu"))
 
 				if fileMenuVisible { // Below has been changed slightly to fix the small bug where the menu would dismiss when mousing over the top gap
-					clay.UI()(clay.ElementDeclaration{
-						Id: clay.ID("FileMenu"),
+					clay.UI(clay.ID("FileMenu"))(clay.ElementDeclaration{
 						Floating: clay.FloatingElementConfig{
 							AttachTo: clay.ATTACH_TO_PARENT,
 							AttachPoints: clay.FloatingAttachPoints{
@@ -229,12 +225,10 @@ func CreateLayout(data *Data) clay.RenderCommandArray {
 			RenderHeaderButton("Support")
 		})
 
-		clay.UI()(clay.ElementDeclaration{
-			Id:     clay.ID("LowerContent"),
+		clay.UI(clay.ID("LowerContent"))(clay.ElementDeclaration{
 			Layout: clay.LayoutConfig{Sizing: layoutExpand, ChildGap: 16},
 		}, func() {
-			clay.UI()(clay.ElementDeclaration{
-				Id:              clay.ID("SideBar"),
+			clay.UI(clay.ID("SideBar"))(clay.ElementDeclaration{
 				BackgroundColor: contentBackgroundColor,
 				Layout: clay.LayoutConfig{
 					LayoutDirection: clay.TOP_TO_BOTTOM,
@@ -292,8 +286,7 @@ func CreateLayout(data *Data) clay.RenderCommandArray {
 					}
 				}
 			})
-			clay.UI()(clay.ElementDeclaration{
-				Id:              clay.ID("MainContent"),
+			clay.UI(clay.ID("MainContent"))(clay.ElementDeclaration{
 				BackgroundColor: contentBackgroundColor,
 				Clip:            clay.ClipElementConfig{Vertical: true, ChildOffset: clay.GetScrollOffset()},
 				Layout: clay.LayoutConfig{

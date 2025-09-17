@@ -26,7 +26,11 @@ func toString(s string) String {
 }
 
 func ID(label string) ElementId {
-	return __HashString(toString(label), 0, 0)
+	return __HashString(toString(label), 0)
+}
+
+func IDI(label string, index uint32) ElementId {
+	return __HashStringWithOffset(toString(label), index, 0)
 }
 
 func PaddingAll(padding uint16) Padding {
@@ -117,8 +121,14 @@ func BorderAll(width uint16) BorderWidth {
 
 // TODO: add generic iterator functions for types with [type]_GetValue functions that are converted into methods
 
-func UI() func(decl ElementDeclaration, children func()) {
-	__OpenElement()
+func UI(id ...ElementId) func(decl ElementDeclaration, children func()) {
+	if len(id) > 1 {
+		panic("clay: too many element ids")
+	} else if len(id) == 1 {
+		__OpenElementWithId(id[0])
+	} else {
+		__OpenElement()
+	}
 	return func(decl ElementDeclaration, children func()) {
 		__ConfigureOpenElement(decl)
 		defer __CloseElement()
