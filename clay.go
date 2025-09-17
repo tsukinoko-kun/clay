@@ -3245,7 +3245,7 @@ func __ConfigureOpenElementPtr(declaration *ElementDeclaration) {
 	if declaration.Clip.Horizontal || declaration.Clip.Vertical {
 		__AttachElementConfig(ElementConfigUnion{ClipElementConfig: __StoreClipElementConfig(declaration.Clip)}, __ELEMENT_CONFIG_TYPE_CLIP)
 		__int32_tArray_Add(&context.openClipElementStack, int32(openLayoutElement.Id))
-		var scrollOffset *__ScrollContainerDataInternal = (*__ScrollContainerDataInternal)(unsafe.Pointer(uintptr(__NULL)))
+		var scrollOffset *__ScrollContainerDataInternal = (*__ScrollContainerDataInternal)(nil)
 		for i := int32(0); i < context.scrollContainerDatas.Length; i++ {
 			var mapping *__ScrollContainerDataInternal = __ScrollContainerDataInternalArray_Get(&context.scrollContainerDatas, i)
 			if openLayoutElement.Id == mapping.ElementId {
@@ -4100,7 +4100,7 @@ func __CalculateFinalLayout() {
 					currentElementBoundingBox.Y -= expand.Height
 					currentElementBoundingBox.Height += expand.Height * 2
 				}
-				var scrollContainerData *__ScrollContainerDataInternal = (*__ScrollContainerDataInternal)(unsafe.Pointer(uintptr(__NULL)))
+				var scrollContainerData *__ScrollContainerDataInternal = (*__ScrollContainerDataInternal)(nil)
 				if __ElementHasConfig(currentElement, __ELEMENT_CONFIG_TYPE_CLIP) {
 					var clipConfig *ClipElementConfig = __FindElementConfigWithType(currentElement, __ELEMENT_CONFIG_TYPE_CLIP).ClipElementConfig
 					for i := int32(0); i < context.scrollContainerDatas.Length; i++ {
@@ -4251,7 +4251,7 @@ func __CalculateFinalLayout() {
 						if 0 > extraSpace {
 							extraSpace = 0
 						} else {
-							extraSpace = extraSpace
+							/* (023) */
 						}
 					} else {
 						for i := int32(0); i < int32(currentElement.ChildrenOrTextContent.Children.Length); i++ {
@@ -4280,7 +4280,7 @@ func __CalculateFinalLayout() {
 						if 0 > extraSpace {
 							extraSpace = 0
 						} else {
-							extraSpace = extraSpace
+							/* (023) */
 						}
 						currentElementTreeNode.NextChildOffset.Y += extraSpace
 					}
@@ -4443,7 +4443,7 @@ func __Array_Allocate_Arena(capacity int32, itemSize uint32, arena *Arena) unsaf
 	} else {
 		__currentContext.errorHandler.ErrorHandlerFunction(ErrorData{ErrorType: ERROR_TYPE_ARENA_CAPACITY_EXCEEDED, ErrorText: String{IsStaticallyAllocated: true, Length: int32(((len("Clay attempted to allocate memory in its arena, but ran out of capacity. Try increasing the capacity of the arena passed to Initialize()") + 1) / int(unsafe.Sizeof(byte(0)))) - int(unsafe.Sizeof(byte(0)))), Chars: libc.CString("Clay attempted to allocate memory in its arena, but ran out of capacity. Try increasing the capacity of the arena passed to Initialize()")}, UserData: __currentContext.errorHandler.UserData})
 	}
-	return unsafe.Pointer(uintptr(__NULL))
+	return nil
 }
 
 func __Array_RangeCheck(index int32, length int32) bool {
@@ -4572,7 +4572,7 @@ func Initialize(arena Arena, layoutDimensions Dimensions, errorHandler ErrorHand
 	if baseOffset == 64 {
 		baseOffset = 0
 	} else {
-		baseOffset = baseOffset
+		/* (024) */
 	}
 	arena.Memory = (*byte)(unsafe.Add(unsafe.Pointer(arena.Memory), baseOffset))
 	var context *Context = __Context_Allocate_Arena(&arena)
@@ -4641,7 +4641,7 @@ func UpdateScrollContainers(enableDragScrolling bool, scrollDelta Vector2, delta
 		context                     *Context                       = GetCurrentContext()
 		isPointerActive             bool                           = enableDragScrolling && (context.pointerInfo.State == POINTER_DATA_PRESSED || context.pointerInfo.State == POINTER_DATA_PRESSED_THIS_FRAME)
 		highestPriorityElementIndex int32                          = -1
-		highestPriorityScrollData   *__ScrollContainerDataInternal = (*__ScrollContainerDataInternal)(unsafe.Pointer(uintptr(__NULL)))
+		highestPriorityScrollData   *__ScrollContainerDataInternal = (*__ScrollContainerDataInternal)(nil)
 	)
 	for i := int32(0); i < context.scrollContainerDatas.Length; i++ {
 		var scrollData *__ScrollContainerDataInternal = __ScrollContainerDataInternalArray_Get(&context.scrollContainerDatas, i)
