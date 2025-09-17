@@ -1,4 +1,4 @@
-// Package clay is a Go port of the C layout library (Clay).
+// Package clay is a Go port of the C layout library [Clay](https://github.com/nicbarker/clay).
 package clay
 
 //go:generate go tool gofumpt -l -w .
