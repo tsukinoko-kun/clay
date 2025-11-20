@@ -55,18 +55,20 @@ func ClayRender(screen *ebiten.Image, scaleFactor float32, renderCommands clay.R
 					return err
 				}
 			} else {
-				vector.DrawFilledRect(
-					screen,
-					boundingBox.X,
-					boundingBox.Y,
-					boundingBox.Width, boundingBox.Height,
-					color.RGBA{
-						R: uint8(config.BackgroundColor.R),
-						G: uint8(config.BackgroundColor.G),
-						B: uint8(config.BackgroundColor.B),
-						A: uint8(config.BackgroundColor.A),
-					}, true,
+				// Workaround for vector.DrawFilledRect bug on macOS/Retina displays
+				// Use a sub-image and fill it instead
+				rect := image.Rect(
+					int(boundingBox.X), int(boundingBox.Y),
+					int(boundingBox.X+boundingBox.Width),
+					int(boundingBox.Y+boundingBox.Height),
 				)
+				subImg := screen.SubImage(rect).(*ebiten.Image)
+				subImg.Fill(color.RGBA{
+					R: uint8(config.BackgroundColor.R),
+					G: uint8(config.BackgroundColor.G),
+					B: uint8(config.BackgroundColor.B),
+					A: uint8(config.BackgroundColor.A),
+				})
 			}
 		case clay.RENDER_COMMAND_TYPE_TEXT:
 			config := &renderCommand.RenderData.Text
