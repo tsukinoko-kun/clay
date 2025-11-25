@@ -61,7 +61,6 @@ func ClayRender(screen *ebiten.Image, scaleFactor float32, renderCommands clay.R
 				}
 			} else {
 				// Workaround for vector.DrawFilledRect bug on macOS/Retina displays
-				// Use a reusable 1x1 image with DrawImage and scaling for better performance
 				rectColor := color.RGBA{
 					R: uint8(config.BackgroundColor.R),
 					G: uint8(config.BackgroundColor.G),
